@@ -1,0 +1,158 @@
+PHP 依赖安装
+
+- 相关依赖安装
+
+
+
+```php
+$ git clone -b $(curl -L https://grpc.io/release) https://github.com/grpc/grpc
+$ cd grpc
+$ git pull --recurse-submodules && git submodule update --init --recursive
+$ make
+$ sudo make install
+
+# make install 会在 /usr/local/bin 目录下生成以下文件
+#grpc_cpp_plugin  
+#grpc_csharp_plugin  
+#grpc_node_plugin  
+#grpc_objective_c_plugin  
+#grpc_php_plugin  
+#grpc_python_plugin  
+#grpc_ruby_plugin
+#protobuf文件生成各种语言的插件
+#注意node 不需要可以直接解析
+
+#protobuf 编译模块安装 protoc
+$ git clone  https://github.com/google/protobuf.git
+$ cd protobuf
+$ ./configure
+$ sudo make
+$ sudo make install 
+#会生成 /usr/local/bin/protoc 可执行文件
+
+#安装gRPC PHP拓展
+#方法一
+$ cd grpc/src/php/ext/grpc
+$ phpize
+$ ./configure
+$ make
+$ sudo make install
+#别忘记在php.ini 文件中加入 extension_dir = "$PHP_PATH/lib/php/extensions/debug-zts-20131226/"     extension = grpc.so
+
+#方法2
+$ sudo pecl install grpc
+#别忘记在php.ini 文件中加入 extension_dir = "$PHP_PATH/lib/php/extensions/debug-zts-20131226/"     extension = grpc.so
+
+
+#安装protobuf 依赖按住
+#方法1 C依赖模块
+$ pecl install protobuf
+
+#方法2 PHP 依赖模块 需要安装 composer
+$ composer require google/protobuf
+
+#安装依赖包
+$ composer require grpc/grpc
+```
+
+protobuf 文件编译成PHP文件
+
+- lisa.proto文件
+
+
+
+```cpp
+syntax = "proto3";
+
+package lisa;
+// The greeting service definition.
+service Greeter {
+  // Sends a greeting
+  rpc SayName (LisaRequest) returns (LisaReply) {}
+}
+// The request message containing the user's name.
+message LisaRequest {
+  string name = 1;
+}
+// The response message containing the greetings
+message LisaReply {
+  string message = 1;
+}
+```
+
+- 编译protobuf 文件生成PHP代码
+
+
+
+```ruby
+$ protoc --proto_path=./ --php_out=./ --grpc_out=./ --plugin=protoc-gen-grpc=/usr/local/bin/grpc_php_plugin ./lisa.proto
+#执行成功之后可以看到生成生成以下文件
+#Lisa/GreeterClient.php  
+#Lisa/LisaReply.php  
+#Lisa/LisaRequest.php
+#GPBMetadata/Lisa.php
+```
+
+- PHP客户端代码
+
+
+
+```php
+lisa_client.php
+<?php
+include __DIR__ . '/vendor/autoload.php';
+include __DIR__ . '/GPBMetadata/Lisa.php';
+include __DIR__ . '/Lisa/LisaReply.php';
+include __DIR__ . '/Lisa/LisaRequest.php';
+include __DIR__ . '/Lisa/GreeterClient.php';
+$client = new Lisa\GreeterClient('localhost:12345', [
+   'credentials' => Grpc\ChannelCredentials::createInsecure(),
+   ]);
+$request = new Lisa\LisaRequest();
+$name = !empty($argv[1]) ? $argv[1] : 'world';
+$request->setName($name);
+list($reply, $status) = $client->SayName($request)->wait();
+$message = $reply->getMessage();
+echo $message,PHP_EOL;
+?>
+
+//要先运行gRPC服务端代码
+//服务端用node 实现 PHP 不支持
+//服务端代码看d介绍
+//php lisa_client.php 执行文件
+//执行成功数据 Hello world
+```
+
+- gRPC 不支持PHP服务端用NODE代替
+
+
+
+```jsx
+lisa_server.js
+//需要安装grpc模块，npm install grpc 
+//node 不需要把protbuf文件翻译成相应代码，可以直接引入protobuf 文件
+//lisa_server.js
+var PROTO_PATH = __dirname + '/lisa.proto';
+var grpc = require('grpc');
+var lisa_proto = grpc.load(PROTO_PATH).lisa;
+/**
+ * Implements the SayHello RPC method.
+ */
+function sayName(call, callback) {
+  callback(null, {message: 'Hello ' + call.request.name});
+}
+/**
+ * Starts an RPC server that receives requests for the Greeter service at the
+ * sample server port
+ */
+function main() {
+  var server = new grpc.Server();
+  server.addProtoService(lisa_proto.Greeter.service, {sayName: sayName});
+  server.bind('0.0.0.0:12345', grpc.ServerCredentials.createInsecure());
+  server.start();
+}
+main();
+// node lisa_server.
+```
+
+

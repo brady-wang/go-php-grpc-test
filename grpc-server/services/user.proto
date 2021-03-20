@@ -1,0 +1,17 @@
+syntax = "proto3";
+package services;
+option go_package=".;services";
+
+message UserInfoReq{
+  int32 Id = 1;
+}
+
+message UserInfoResp{
+  int32 Id = 1;
+  string Name = 2;
+  string Sex = 3;
+}
+
+service UserService{
+  rpc getUserInfo(UserInfoReq) returns (UserInfoResp);
+}
